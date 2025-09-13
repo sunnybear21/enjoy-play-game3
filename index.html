@@ -1,301 +1,429 @@
-import React, { useState, useEffect, useCallback } from 'react';
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>두더지 잡기 게임</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
 
-const WhackAMoleGame = () => {
-  const [score, setScore] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(30);
-  const [gameActive, setGameActive] = useState(false);
-  const [moles, setMoles] = useState(Array(9).fill(null)); // null, 'mole', 'bomb'
-  const [hitMoles, setHitMoles] = useState(Array(9).fill(false));
-  const [bestScore, setBestScore] = useState(() => {
-    return parseInt(localStorage.getItem('whackAMoleBestScore') || '0');
-  });
-  const [gameHistory, setGameHistory] = useState(() => {
-    const history = localStorage.getItem('whackAMoleHistory');
-    return history ? JSON.parse(history) : [];
-  });
-  const [soundEnabled, setSoundEnabled] = useState(true);
+    <script type="text/babel">
+        const { useState, useEffect, useCallback } = React;
 
-  // 효과음 함수들
-  const playSound = (type) => {
-    if (!soundEnabled) return;
-    
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    switch(type) {
-      case 'hit':
-        // 두더지 잡기 성공음 (높은 톤)
-        oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
-        oscillator.frequency.exponentialRampToValueAtTime(400, audioContext.currentTime + 0.1);
-        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.1);
-        break;
-      case 'bomb':
-        // 폭탄 효과음 (낮은 톤)
-        oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
-        oscillator.frequency.exponentialRampToValueAtTime(100, audioContext.currentTime + 0.3);
-        gainNode.gain.setValueAtTime(0.4, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.3);
-        break;
-      case 'gameOver':
-        // 게임 오버음
-        oscillator.frequency.setValueAtTime(300, audioContext.currentTime);
-        oscillator.frequency.exponentialRampToValueAtTime(150, audioContext.currentTime + 0.5);
-        gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.5);
-        break;
-    }
-  };
+        const WhackAMoleGame = () => {
+            const [score, setScore] = useState(0);
+            const [timeLeft, setTimeLeft] = useState(30);
+            const [gameActive, setGameActive] = useState(false);
+            const [moles, setMoles] = useState(Array(9).fill(null));
+            const [hitMoles, setHitMoles] = useState(Array(9).fill(false));
+            const [bestScore, setBestScore] = useState(() => {
+                return parseInt(localStorage.getItem('whackAMoleBestScore') || '0');
+            });
+            const [gameHistory, setGameHistory] = useState(() => {
+                const history = localStorage.getItem('whackAMoleHistory');
+                return history ? JSON.parse(history) : [];
+            });
+            const [soundEnabled, setSoundEnabled] = useState(true);
 
-  // 두더지와 폭탄이 나타나는 간격 조절
-  const moleInterval = useCallback(() => {
-    if (!gameActive) return;
-    
-    setMoles(prev => {
-      const newMoles = Array(9).fill(null);
-      // 랜덤하게 1-3개의 객체를 나타나게 함
-      const numItems = Math.floor(Math.random() * 3) + 1;
-      const usedPositions = [];
-      
-      for (let i = 0; i < numItems; i++) {
-        let position;
-        do {
-          position = Math.floor(Math.random() * 9);
-        } while (usedPositions.includes(position));
-        
-        usedPositions.push(position);
-        // 20% 확률로 폭탄, 80% 확률로 두더지
-        newMoles[position] = Math.random() < 0.2 ? 'bomb' : 'mole';
-      }
-      
-      return newMoles;
-    });
-    
-    // 객체가 나타난 후 0.8초 후에 사라지게 함
-    setTimeout(() => {
-      setMoles(Array(9).fill(null));
-      setHitMoles(Array(9).fill(false));
-    }, 800);
-  }, [gameActive]);
-
-  // 게임 시작
-  const startGame = () => {
-    setScore(0);
-    setTimeLeft(30);
-    setGameActive(true);
-    setMoles(Array(9).fill(null));
-    setHitMoles(Array(9).fill(false));
-  };
-
-  // 객체 클릭 처리
-  const whackItem = (index) => {
-    if (!gameActive || !moles[index] || hitMoles[index]) return;
-    
-    const itemType = moles[index];
-    
-    if (itemType === 'mole') {
-      // 두더지 잡기 성공
-      setScore(prev => prev + 10);
-      playSound('hit');
-    } else if (itemType === 'bomb') {
-      // 폭탄 클릭 - 점수 감소
-      setScore(prev => Math.max(0, prev - 20));
-      playSound('bomb');
-    }
-    
-    setHitMoles(prev => {
-      const newHitMoles = [...prev];
-      newHitMoles[index] = true;
-      return newHitMoles;
-    });
-  };
-
-  // 게임 종료 처리
-  const endGame = useCallback(() => {
-    setGameActive(false);
-    playSound('gameOver');
-    
-    // 최고 기록 업데이트
-    if (score > bestScore) {
-      setBestScore(score);
-      localStorage.setItem('whackAMoleBestScore', score.toString());
-    }
-    
-    // 게임 기록 저장
-    const newRecord = {
-      score,
-      date: new Date().toLocaleString('ko-KR'),
-      timestamp: Date.now()
-    };
-    
-    const updatedHistory = [newRecord, ...gameHistory].slice(0, 10); // 최근 10게임만 저장
-    setGameHistory(updatedHistory);
-    localStorage.setItem('whackAMoleHistory', JSON.stringify(updatedHistory));
-  }, [score, bestScore, gameHistory]);
-
-  // 게임 타이머
-  useEffect(() => {
-    let timer;
-    if (gameActive && timeLeft > 0) {
-      timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
-    } else if (timeLeft === 0) {
-      endGame();
-    }
-    return () => clearTimeout(timer);
-  }, [gameActive, timeLeft, endGame]);
-
-  // 두더지 등장 타이머
-  useEffect(() => {
-    let interval;
-    if (gameActive) {
-      interval = setInterval(moleInterval, 1200);
-    }
-    return () => clearInterval(interval);
-  }, [gameActive, moleInterval]);
-
-  // 객체별 이모지 반환
-  const getItemEmoji = (type, isHit) => {
-    if (isHit) {
-      return type === 'bomb' ? '💥' : '⭐';
-    }
-    return type === 'mole' ? '🐹' : '💣';
-  };
-
-  return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-green-100 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-lg w-full">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold text-green-800">
-            🔨 두더지 잡기
-          </h1>
-          <button
-            onClick={() => setSoundEnabled(!soundEnabled)}
-            className={`p-2 rounded-full ${soundEnabled ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-600'}`}
-          >
-            {soundEnabled ? '🔊' : '🔇'}
-          </button>
-        </div>
-        
-        {/* 게임 정보 */}
-        <div className="grid grid-cols-3 gap-4 mb-4 text-center">
-          <div className="bg-blue-100 p-2 rounded-lg">
-            <div className="text-xs text-blue-600">현재 점수</div>
-            <div className="text-xl font-bold text-blue-800">{score}</div>
-          </div>
-          <div className="bg-red-100 p-2 rounded-lg">
-            <div className="text-xs text-red-600">남은 시간</div>
-            <div className="text-xl font-bold text-red-800">{timeLeft}초</div>
-          </div>
-          <div className="bg-yellow-100 p-2 rounded-lg">
-            <div className="text-xs text-yellow-600">최고 기록</div>
-            <div className="text-xl font-bold text-yellow-800">{bestScore}</div>
-          </div>
-        </div>
-
-        {/* 게임 규칙 */}
-        <div className="bg-gray-100 p-3 rounded-lg mb-4 text-sm">
-          <div className="flex justify-between text-center">
-            <div>🐹 +10점</div>
-            <div>💣 -20점</div>
-            <div>⚠️ 함정 주의!</div>
-          </div>
-        </div>
-
-        {/* 게임 그리드 */}
-        <div className="grid grid-cols-3 gap-2 mb-4">
-          {moles.map((item, index) => (
-            <button
-              key={index}
-              onClick={() => whackItem(index)}
-              className={`
-                aspect-square rounded-xl border-4 transition-all duration-200 transform text-4xl
-                ${item && !hitMoles[index]
-                  ? `${item === 'bomb' ? 'border-red-600 bg-red-200 hover:bg-red-300' : 'border-brown-600 bg-amber-200 hover:bg-amber-300'} hover:scale-105 cursor-pointer shadow-lg`
-                  : 'border-gray-400 bg-amber-900'
+            // 효과음 함수들
+            const playSound = (type) => {
+                if (!soundEnabled) return;
+                
+                try {
+                    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    const oscillator = audioContext.createOscillator();
+                    const gainNode = audioContext.createGain();
+                    
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+                    
+                    switch(type) {
+                        case 'hit':
+                            oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+                            oscillator.frequency.exponentialRampToValueAtTime(400, audioContext.currentTime + 0.1);
+                            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+                            oscillator.start(audioContext.currentTime);
+                            oscillator.stop(audioContext.currentTime + 0.1);
+                            break;
+                        case 'bomb':
+                            oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
+                            oscillator.frequency.exponentialRampToValueAtTime(100, audioContext.currentTime + 0.3);
+                            gainNode.gain.setValueAtTime(0.4, audioContext.currentTime);
+                            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+                            oscillator.start(audioContext.currentTime);
+                            oscillator.stop(audioContext.currentTime + 0.3);
+                            break;
+                        case 'gameOver':
+                            oscillator.frequency.setValueAtTime(300, audioContext.currentTime);
+                            oscillator.frequency.exponentialRampToValueAtTime(150, audioContext.currentTime + 0.5);
+                            gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+                            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+                            oscillator.start(audioContext.currentTime);
+                            oscillator.stop(audioContext.currentTime + 0.5);
+                            break;
+                    }
+                } catch (error) {
+                    console.log('Audio context not available');
                 }
-                ${hitMoles[index] ? 'scale-95 bg-gray-200' : ''}
-                ${!gameActive ? 'cursor-not-allowed opacity-50' : ''}
-              `}
-              disabled={!gameActive}
-            >
-              {item && !hitMoles[index] ? getItemEmoji(item, false) : 
-               hitMoles[index] ? getItemEmoji(moles[index], true) : '🕳️'}
-            </button>
-          ))}
-        </div>
+            };
 
-        {/* 게임 컨트롤 */}
-        <div className="text-center mb-4">
-          {!gameActive && timeLeft === 30 && (
-            <button
-              onClick={startGame}
-              className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-full text-xl transition-colors duration-200"
-            >
-              게임 시작!
-            </button>
-          )}
-          
-          {!gameActive && timeLeft === 0 && (
-            <div className="space-y-3">
-              <h2 className="text-xl font-bold text-gray-800">
-                게임 끝! 🎉
-              </h2>
-              <p className="text-lg text-gray-600">
-                최종 점수: <span className="font-bold text-blue-600">{score}점</span>
-                {score === bestScore && score > 0 && (
-                  <span className="text-yellow-600 ml-2">🏆 신기록!</span>
-                )}
-              </p>
-              <button
-                onClick={startGame}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-full text-lg transition-colors duration-200"
-              >
-                다시 하기
-              </button>
-            </div>
-          )}
-          
-          {gameActive && (
-            <div className="text-gray-600 text-sm">
-              두더지(🐹)는 잡고 폭탄(💣)은 피하세요!
-            </div>
-          )}
-        </div>
+            // 두더지와 폭탄이 나타나는 간격 조절
+            const moleInterval = useCallback(() => {
+                if (!gameActive) return;
+                
+                setMoles(prev => {
+                    const newMoles = Array(9).fill(null);
+                    const numItems = Math.floor(Math.random() * 3) + 1;
+                    const usedPositions = [];
+                    
+                    for (let i = 0; i < numItems; i++) {
+                        let position;
+                        do {
+                            position = Math.floor(Math.random() * 9);
+                        } while (usedPositions.includes(position));
+                        
+                        usedPositions.push(position);
+                        newMoles[position] = Math.random() < 0.3 ? 'bomb' : 'mole';
+                    }
+                    
+                    return newMoles;
+                });
+                
+                setTimeout(() => {
+                    setMoles(Array(9).fill(null));
+                    setHitMoles(Array(9).fill(false));
+                }, 1000);
+            }, [gameActive]);
 
-        {/* 게임 기록 */}
-        {gameHistory.length > 0 && (
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h3 className="font-bold text-gray-700 mb-2 text-center">📊 최근 기록</h3>
-            <div className="max-h-32 overflow-y-auto">
-              {gameHistory.slice(0, 5).map((record, index) => (
-                <div key={record.timestamp} className="flex justify-between items-center py-1 text-sm">
-                  <span className="text-gray-500">{record.date}</span>
-                  <span className={`font-bold ${record.score === bestScore ? 'text-yellow-600' : 'text-blue-600'}`}>
-                    {record.score}점 {record.score === bestScore && '🏆'}
-                  </span>
-                </div>
-              ))}
-            </div>
-            {gameHistory.length > 5 && (
-              <div className="text-center text-xs text-gray-500 mt-2">
-                총 {gameHistory.length}게임 기록
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
+            // 게임 시작
+            const startGame = () => {
+                setScore(0);
+                setTimeLeft(30);
+                setGameActive(true);
+                setMoles(Array(9).fill(null));
+                setHitMoles(Array(9).fill(false));
+            };
 
-export default WhackAMoleGame;
+            // 객체 클릭 처리
+            const whackItem = (index) => {
+                if (!gameActive || !moles[index] || hitMoles[index]) return;
+                
+                const itemType = moles[index];
+                
+                if (itemType === 'mole') {
+                    setScore(prev => prev + 10);
+                    playSound('hit');
+                } else if (itemType === 'bomb') {
+                    setScore(prev => Math.max(0, prev - 30));
+                    playSound('bomb');
+                }
+                
+                setHitMoles(prev => {
+                    const newHitMoles = [...prev];
+                    newHitMoles[index] = true;
+                    return newHitMoles;
+                });
+            };
+
+            // 게임 종료 처리
+            const endGame = useCallback(() => {
+                setGameActive(false);
+                playSound('gameOver');
+                
+                if (score > bestScore) {
+                    setBestScore(score);
+                    localStorage.setItem('whackAMoleBestScore', score.toString());
+                }
+                
+                const newRecord = {
+                    score,
+                    date: new Date().toLocaleString('ko-KR'),
+                    timestamp: Date.now()
+                };
+                
+                const updatedHistory = [newRecord, ...gameHistory].slice(0, 10);
+                setGameHistory(updatedHistory);
+                localStorage.setItem('whackAMoleHistory', JSON.stringify(updatedHistory));
+            }, [score, bestScore, gameHistory]);
+
+            // 게임 타이머
+            useEffect(() => {
+                let timer;
+                if (gameActive && timeLeft > 0) {
+                    timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
+                } else if (timeLeft === 0) {
+                    endGame();
+                }
+                return () => clearTimeout(timer);
+            }, [gameActive, timeLeft, endGame]);
+
+            // 두더지 등장 타이머
+            useEffect(() => {
+                let interval;
+                if (gameActive) {
+                    interval = setInterval(moleInterval, 1500);
+                }
+                return () => clearInterval(interval);
+            }, [gameActive, moleInterval]);
+
+            const getItemEmoji = (type, isHit) => {
+                if (isHit) {
+                    return type === 'bomb' ? '💥' : '⭐';
+                }
+                return type === 'mole' ? '🐹' : '💣';
+            };
+
+            const getHoleStyle = (item, index, isHit) => {
+                const baseStyle = "aspect-square rounded-xl border-4 transition-all duration-200 transform text-4xl flex items-center justify-center font-bold";
+                
+                if (isHit) {
+                    return `${baseStyle} scale-95 bg-gray-200 border-gray-400 animate-pulse`;
+                }
+                
+                if (!item) {
+                    return `${baseStyle} border-amber-800 bg-amber-900 cursor-default shadow-inner`;
+                }
+                
+                if (!gameActive) {
+                    return `${baseStyle} border-gray-400 bg-amber-900 cursor-not-allowed opacity-50`;
+                }
+                
+                if (item === 'bomb') {
+                    return `${baseStyle} border-red-600 bg-red-200 hover:bg-red-300 hover:scale-105 cursor-pointer shadow-lg animate-bounce`;
+                } else {
+                    return `${baseStyle} border-green-600 bg-green-200 hover:bg-green-300 hover:scale-105 cursor-pointer shadow-lg animate-pulse`;
+                }
+            };
+
+            return React.createElement('div', { 
+                className: 'flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-green-100 to-blue-100 p-4' 
+            }, 
+                React.createElement('div', { 
+                    className: 'bg-white rounded-2xl shadow-2xl p-6 max-w-lg w-full' 
+                }, [
+                    // 헤더
+                    React.createElement('div', { 
+                        key: 'header',
+                        className: 'flex items-center justify-between mb-4' 
+                    }, [
+                        React.createElement('h1', { 
+                            key: 'title',
+                            className: 'text-3xl font-bold text-green-800' 
+                        }, '🔨 두더지 잡기'),
+                        React.createElement('button', {
+                            key: 'sound-btn',
+                            onClick: () => setSoundEnabled(!soundEnabled),
+                            className: `p-2 rounded-full transition-colors ${soundEnabled ? 'bg-green-500 text-white' : 'bg-gray-300 text-gray-600'}`
+                        }, soundEnabled ? '🔊' : '🔇')
+                    ]),
+                    
+                    // 게임 정보
+                    React.createElement('div', { 
+                        key: 'game-info',
+                        className: 'grid grid-cols-3 gap-4 mb-4 text-center' 
+                    }, [
+                        React.createElement('div', { 
+                            key: 'score',
+                            className: 'bg-blue-100 p-3 rounded-lg border border-blue-200' 
+                        }, [
+                            React.createElement('div', { 
+                                key: 'score-label',
+                                className: 'text-xs text-blue-600 font-semibold' 
+                            }, '현재 점수'),
+                            React.createElement('div', { 
+                                key: 'score-value',
+                                className: 'text-2xl font-bold text-blue-800' 
+                            }, score)
+                        ]),
+                        React.createElement('div', { 
+                            key: 'time',
+                            className: 'bg-red-100 p-3 rounded-lg border border-red-200' 
+                        }, [
+                            React.createElement('div', { 
+                                key: 'time-label',
+                                className: 'text-xs text-red-600 font-semibold' 
+                            }, '남은 시간'),
+                            React.createElement('div', { 
+                                key: 'time-value',
+                                className: 'text-2xl font-bold text-red-800' 
+                            }, `${timeLeft}초`)
+                        ]),
+                        React.createElement('div', { 
+                            key: 'best',
+                            className: 'bg-yellow-100 p-3 rounded-lg border border-yellow-200' 
+                        }, [
+                            React.createElement('div', { 
+                                key: 'best-label',
+                                className: 'text-xs text-yellow-600 font-semibold' 
+                            }, '최고 기록'),
+                            React.createElement('div', { 
+                                key: 'best-value',
+                                className: 'text-2xl font-bold text-yellow-800' 
+                            }, bestScore)
+                        ])
+                    ]),
+                    
+                    // 게임 규칙
+                    React.createElement('div', { 
+                        key: 'rules',
+                        className: 'bg-gray-100 p-4 rounded-lg mb-4 text-sm border border-gray-200' 
+                    }, 
+                        React.createElement('div', { 
+                            className: 'grid grid-cols-3 gap-2 text-center' 
+                        }, [
+                            React.createElement('div', { 
+                                key: 'rule1',
+                                className: 'font-semibold' 
+                            }, [
+                                '🐹 두더지',
+                                React.createElement('br'),
+                                React.createElement('span', { 
+                                    className: 'text-green-600' 
+                                }, '+10점')
+                            ]),
+                            React.createElement('div', { 
+                                key: 'rule2',
+                                className: 'font-semibold' 
+                            }, [
+                                '💣 폭탄',
+                                React.createElement('br'),
+                                React.createElement('span', { 
+                                    className: 'text-red-600' 
+                                }, '-30점')
+                            ]),
+                            React.createElement('div', { 
+                                key: 'rule3',
+                                className: 'font-semibold' 
+                            }, [
+                                '⚡ 빠르게',
+                                React.createElement('br'),
+                                React.createElement('span', { 
+                                    className: 'text-blue-600' 
+                                }, '잡으세요!')
+                            ])
+                        ])
+                    ),
+                    
+                    // 게임 그리드
+                    React.createElement('div', { 
+                        key: 'game-grid',
+                        className: 'grid grid-cols-3 gap-3 mb-6 p-4 bg-amber-50 rounded-xl border border-amber-200' 
+                    }, 
+                        moles.map((item, index) =>
+                            React.createElement('button', {
+                                key: index,
+                                onClick: () => whackItem(index),
+                                className: getHoleStyle(item, index, hitMoles[index]),
+                                disabled: !gameActive
+                            }, 
+                                item && !hitMoles[index] ? getItemEmoji(item, false) : 
+                                hitMoles[index] ? getItemEmoji(moles[index], true) : '🕳️'
+                            )
+                        )
+                    ),
+                    
+                    // 게임 컨트롤
+                    React.createElement('div', { 
+                        key: 'controls',
+                        className: 'text-center mb-4' 
+                    }, [
+                        !gameActive && timeLeft === 30 && React.createElement('button', {
+                            key: 'start-btn',
+                            onClick: startGame,
+                            className: 'bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-10 rounded-full text-xl transition-all duration-200 hover:scale-105 shadow-lg'
+                        }, '🎮 게임 시작!'),
+                        
+                        !gameActive && timeLeft === 0 && React.createElement('div', {
+                            key: 'game-over',
+                            className: 'space-y-4'
+                        }, [
+                            React.createElement('h2', {
+                                key: 'game-over-title',
+                                className: 'text-2xl font-bold text-gray-800'
+                            }, '게임 끝! 🎉'),
+                            React.createElement('div', {
+                                key: 'final-score',
+                                className: 'bg-blue-50 p-4 rounded-lg border border-blue-200'
+                            }, React.createElement('p', {
+                                className: 'text-lg text-gray-700'
+                            }, [
+                                '최종 점수: ',
+                                React.createElement('span', {
+                                    key: 'score-value',
+                                    className: 'font-bold text-blue-600 text-xl'
+                                }, `${score}점`),
+                                score === bestScore && score > 0 && React.createElement('span', {
+                                    key: 'new-record',
+                                    className: 'text-yellow-600 ml-2 text-xl'
+                                }, '🏆 신기록!')
+                            ])),
+                            React.createElement('button', {
+                                key: 'restart-btn',
+                                onClick: startGame,
+                                className: 'bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-full text-lg transition-all duration-200 hover:scale-105 shadow-lg'
+                            }, '🔄 다시 하기')
+                        ]),
+                        
+                        gameActive && React.createElement('div', {
+                            key: 'game-help',
+                            className: 'bg-yellow-50 p-3 rounded-lg border border-yellow-200'
+                        }, React.createElement('div', {
+                            className: 'text-gray-700 font-semibold'
+                        }, '🐹 두더지는 잡고 💣 폭탄은 피하세요!'))
+                    ]),
+                    
+                    // 게임 기록
+                    gameHistory.length > 0 && React.createElement('div', {
+                        key: 'history',
+                        className: 'bg-gray-50 p-4 rounded-lg border border-gray-200'
+                    }, [
+                        React.createElement('h3', {
+                            key: 'history-title',
+                            className: 'font-bold text-gray-700 mb-3 text-center text-lg'
+                        }, '📊 최근 기록'),
+                        React.createElement('div', {
+                            key: 'history-list',
+                            className: 'max-h-32 overflow-y-auto'
+                        }, 
+                            gameHistory.slice(0, 5).map((record, index) =>
+                                React.createElement('div', {
+                                    key: record.timestamp,
+                                    className: 'flex justify-between items-center py-2 text-sm border-b border-gray-200 last:border-b-0'
+                                }, [
+                                    React.createElement('span', {
+                                        key: 'date',
+                                        className: 'text-gray-500'
+                                    }, record.date),
+                                    React.createElement('span', {
+                                        key: 'score',
+                                        className: `font-bold ${record.score === bestScore ? 'text-yellow-600' : 'text-blue-600'}`
+                                    }, `${record.score}점 ${record.score === bestScore ? '🏆' : ''}`)
+                                ])
+                            )
+                        ),
+                        gameHistory.length > 5 && React.createElement('div', {
+                            key: 'history-count',
+                            className: 'text-center text-xs text-gray-500 mt-2'
+                        }, `총 ${gameHistory.length}게임 기록 보관 중`)
+                    ])
+                ])
+            );
+        };
+
+        ReactDOM.render(React.createElement(WhackAMoleGame), document.getElementById('root'));
+    </script>
+</body>
+</html>
