@@ -512,6 +512,7 @@
                 timeLeft--;
                 timeElement.textContent = timeLeft + '초';
                 if (timeLeft <= 0) {
+                    clearInterval(gameTimer); // 타이머 정리
                     endGame();
                 }
             }, 1000);
